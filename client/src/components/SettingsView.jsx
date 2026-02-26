@@ -47,6 +47,24 @@ export default function SettingsView({ settings, onSave }) {
           Fully local real-time bulletins.{'\n'}
           No accounts. No storage. No cloud.
         </p>
+        <div className="flex flex-col gap-2 mt-2">
+          <a
+            href="https://buymeacoffee.com/nickenbacker12"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="self-start px-4 py-2 rounded-lg font-mono text-xs font-semibold bg-accent text-[#111111] active:scale-95 transition-all"
+          >
+            ☕ Buy me a coffee
+          </a>
+          <a
+            href="/tos.html"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-mono text-xs text-muted underline underline-offset-2"
+          >
+            Terms of Service
+          </a>
+        </div>
       </div>
     </div>
   )
