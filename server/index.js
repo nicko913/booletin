@@ -21,8 +21,29 @@ const clientDist = path.join(__dirname, '../client/dist')
 app.use(express.static(clientDist))
 
 // In-memory channel store
-// channelId → { id, name, broadcasterSocketId, listenerCount }
+// channelId → { id, name, broadcasterSocketId, listenerCount, inactivityTimer }
 const channels = new Map()
+
+const INACTIVITY_TIMEOUT_MS = 60 * 60 * 1000 // 1 hour
+
+function closeChannel(channelId, reason = 'ended') {
+  const channel = channels.get(channelId)
+  if (!channel) return
+  clearTimeout(channel.inactivityTimer)
+  io.to(channelId).emit('channel:ended', { channelId, reason })
+  channels.delete(channelId)
+  io.socketsLeave(channelId)
+  broadcastChannelList()
+}
+
+function resetInactivityTimer(channelId) {
+  const channel = channels.get(channelId)
+  if (!channel) return
+  clearTimeout(channel.inactivityTimer)
+  channel.inactivityTimer = setTimeout(() => {
+    closeChannel(channelId, 'inactivity')
+  }, INACTIVITY_TIMEOUT_MS)
+}
 
 function buildChannelList() {
   return Array.from(channels.values()).map(({ id, name, listenerCount }) => ({
@@ -51,11 +72,13 @@ io.on('connection', (socket) => {
       id: channelId,
       name,
       broadcasterSocketId: socket.id,
-      listenerCount: 0
+      listenerCount: 0,
+      inactivityTimer: null
     })
     socket.join(channelId)
     socket.data.role = 'broadcaster'
     socket.data.channelId = channelId
+    resetInactivityTimer(channelId)
     socket.emit('channel:created', { channelId })
     broadcastChannelList()
   })
@@ -63,18 +86,16 @@ io.on('connection', (socket) => {
   socket.on('channel:end', () => {
     const channelId = socket.data.channelId
     if (!channelId || socket.data.role !== 'broadcaster') return
-    io.to(channelId).emit('channel:ended', { channelId })
-    channels.delete(channelId)
-    io.socketsLeave(channelId)
+    closeChannel(channelId, 'ended')
     socket.data.channelId = null
     socket.data.role = null
-    broadcastChannelList()
   })
 
   socket.on('bulletin:send', ({ text }) => {
     const channelId = socket.data.channelId
     if (!channelId || socket.data.role !== 'broadcaster') return
     const bulletin = { text, timestamp: new Date().toISOString() }
+    resetInactivityTimer(channelId)
     // Push to subscribers
     socket.to(channelId).emit('bulletin', bulletin)
     // Echo back to broadcaster for their history
@@ -128,10 +149,7 @@ io.on('connection', (socket) => {
     if (!channelId) return
 
     if (socket.data.role === 'broadcaster') {
-      io.to(channelId).emit('channel:ended', { channelId })
-      channels.delete(channelId)
-      io.socketsLeave(channelId)
-      broadcastChannelList()
+      closeChannel(channelId, 'ended')
     } else if (socket.data.role === 'subscriber') {
       const channel = channels.get(channelId)
       if (channel && channel.listenerCount > 0) {

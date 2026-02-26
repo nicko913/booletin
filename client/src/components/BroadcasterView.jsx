@@ -28,12 +28,20 @@ export default function BroadcasterView({ settings, connected }) {
     socket.on('bulletin:sent', (bulletin) => {
       setBulletins(prev => [...prev, bulletin])
     })
+    socket.on('channel:ended', ({ reason }) => {
+      if (reason === 'inactivity') {
+        setIsLive(false)
+        setListenerCount(0)
+        setError('Channel closed after 1 hour of inactivity.')
+      }
+    })
 
     return () => {
       socket.off('channel:created')
       socket.off('channel:error')
       socket.off('listener:count')
       socket.off('bulletin:sent')
+      socket.off('channel:ended')
     }
   }, [])
 
